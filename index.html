@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AquaWatch – Water Level Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&display=swap" rel="stylesheet">
+<style>
+/* =============================================
+   DESIGN TOKENS – AquaWatch
+   Palette: Deep Navy → Aqua, warm water tones
+   Signature: Animated CSS water tanks with wave physics
+============================================= */
+:root {
+  --navy:        #021b2e;
+  --navy-mid:    #0a3a5c;
+  --blue:        #0f5f99;
+  --sky:         #1a8ccc;
+  --aqua:        #00bcd4;
+  --aqua-soft:   #e0f7fa;
+  --surface:     #f4f8fb;
+  --card:        #ffffff;
+  --border:      #cce0ee;
+  --border-soft: #e8f2f9;
+
+  /* Water level colours */
+  --w-high-top:  #26c6a0;
+  --w-high-bot:  #00897b;
+  --w-mid-top:   #ffca28;
+  --w-mid-bot:   #fb8c00;
+  --w-low-top:   #ef5350;
+  --w-low-bot:   #b71c1c;
+  --w-off-top:   #90a4ae;
+  --w-off-bot:   #546e7a;
+
+  --text:        #0d1f2d;
+  --muted:       #4a6478;
+  --muted-light: #87a3b5;
+  --shadow:      0 4px 18px rgba(2,27,46,0.10);
+  --shadow-deep: 0 10px 36px rgba(2,27,46,0.16);
+  --radius:      14px;
+  --radius-sm:   8px;
+  --transition:  0.2s ease;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.55;
+  overflow-x: hidden;
+}
+
+/* =============================================
+   LAYOUT
+============================================= */
+.shell {
+  display: grid;
+  grid-template-columns: 252px 1fr;
+  min-height: 100vh;
+}
+
+/* =============================================
+   SIDEBAR
+============================================= */
+.sidebar {
+  background: linear-gradient(160deg, var(--navy) 0%, #072340 55%, var(--navy-mid) 100%);
+  color: #fff;
+  padding: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 4px 0 24px rgba(2,27,46,0.3);
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 20px 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.brand-drop {
+  width: 44px; height: 44px;
+  background: linear-gradient(135deg, var(--aqua) 0%, #006978 100%);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 4px 12px rgba(0,188,212,0.35);
+  animation: drip 3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes drip {
+  0%,100% { box-shadow: 0 4px 12px rgba(0,188,212,0.35); }
+  50%      { box-shadow: 0 8px 24px rgba(0,188,212,0.55), 0 2px 0 rgba(0,188,212,0.2) inset; }
+}
+.brand-text { line-height: 1.2; }
+.brand-name { font-size: 17px; font-weight: 800; letter-spacing: -0.3px; }
+.brand-sub  { font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 500; margin-top: 1px; }
+
+.nav-menu { list-style: none; padding: 14px 10px; flex: 1; }
+.nav-item  { margin-bottom: 3px; }
+.nav-link  {
+  display: flex; align-items: center; gap: 11px;
+  padding: 12px 14px; border-radius: 10px;
+  color: rgba(255,255,255,0.7);
+  background: none; border: none; width: 100%; text-align: left;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background var(--transition), color var(--transition), transform var(--transition);
+  font-family: inherit;
+}
+.nav-link:hover  { background: rgba(255,255,255,0.09); color: #fff; transform: translateX(2px); }
+.nav-link.active { background: linear-gradient(90deg, var(--sky), #0077aa); color: #fff; box-shadow: 0 3px 10px rgba(26,140,204,0.4); }
+.nav-icon { font-size: 17px; flex-shrink: 0; }
+.nav-link.danger { color: #ff8a80; margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px; }
+.nav-link.danger:hover { background: rgba(239,83,80,0.15); }
+
+.sidebar-footer {
+  padding: 12px 20px 20px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  font-size: 11px;
+  color: rgba(255,255,255,0.3);
+  text-align: center;
+}
+
+/* =============================================
+   MAIN CONTENT
+============================================= */
+.main-content { padding: 24px; min-width: 0; }
+
+.page-section { display: none; }
+.page-section.active { display: block; }
+
+.page-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 22px; flex-wrap: wrap; gap: 12px;
+}
+.page-title    { font-size: clamp(22px, 2.2vw, 28px); font-weight: 800; color: var(--navy); letter-spacing: -0.5px; }
+.page-subtitle { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+/* =============================================
+   CARDS
+============================================= */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.card-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+.card-title  { font-size:14px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+
+/* =============================================
+   METRIC STRIP
+============================================= */
+.metric-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.metric-tile {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.metric-tile-label { font-size: 12px; font-weight: 600; color: var(--muted-light); text-transform: uppercase; letter-spacing: .5px; }
+.metric-tile-val   { font-size: 28px; font-weight: 800; color: var(--navy); line-height: 1; margin-top: 4px; }
+.metric-tile-val.c-high    { color: var(--w-high-bot); }
+.metric-tile-val.c-mid     { color: #e65100; }
+.metric-tile-val.c-low     { color: var(--w-low-bot); }
+.metric-tile-val.c-offline { color: var(--w-off-bot); }
+
+/* =============================================
+   LOCATION BAR
+============================================= */
+.loc-bar {
+  background: var(--card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow);
+  padding: 14px 20px;
+  margin-bottom: 18px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.loc-bar-label { font-size: 13px; font-weight: 700; color: var(--muted); flex-shrink: 0; }
+.loc-updated   { font-size: 12px; color: var(--muted-light); margin-left: auto; }
+
+/* =============================================
+   PAGE NAV BUTTONS
+============================================= */
+.page-nav { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 10px; }
+.pn-btn {
+  min-width: 38px; height: 34px; padding: 0 10px;
+  border: 1px solid var(--border);
+  background: var(--card); border-radius: 8px;
+  cursor: pointer; font-size: 13px; font-weight: 700;
+  color: var(--blue); transition: all var(--transition);
+  font-family: inherit;
+}
+.pn-btn:hover  { background: var(--blue); color: #fff; border-color: var(--blue); }
+.pn-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+/* =============================================
+   WATER TANK GRID
+============================================= */
+.tank-grid {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0,1fr));
+  gap: 12px;
+}
+
+/* ---- The Tank Card ---- */
+.tank-card {
+  background: var(--card);
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  box-shadow: 0 2px 8px rgba(2,27,46,0.07);
+  overflow: hidden;
+  transition: transform var(--transition), box-shadow var(--transition);
+  cursor: default;
+}
+.tank-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(2,27,46,0.14);
+}
+.tank-card.critical {
+  border-color: rgba(183,28,28,0.4);
+  animation: pulse-danger 2.5s ease-in-out infinite;
+}
+@keyframes pulse-danger {
+  0%,100% { box-shadow: 0 2px 8px rgba(183,28,28,0.15); }
+  50%      { box-shadow: 0 4px 20px rgba(183,28,28,0.35); }
+}
+
+/* Tank cap on top */
+.tank-cap {
+  height: 5px;
+  margin: 8px 14px 0;
+  background: linear-gradient(90deg, #b0c4d8 0%, #d0dde8 50%, #b0c4d8 100%);
+  border-radius: 3px 3px 0 0;
+}
+
+/* Tank body container */
+.tank-body-wrap {
+  position: relative;
+  height: 105px;
+  margin: 0 10px;
+  background: #eaf2f8;
+  border: 1.5px solid #c0d4e4;
+  border-top: none;
+  border-radius: 0 0 5px 5px;
+  overflow: hidden;
+}
+
+/* Ruler ticks on right side */
+.tank-ruler {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
+  width: 8px;
+  z-index: 3;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 0 2px;
+  background: rgba(192,212,228,0.5);
+}
+.tick {
+  width: 4px; height: 1.5px;
+  background: rgba(2,27,46,0.18);
+  border-radius: 1px;
+  align-self: flex-end;
+}
+.tick.major { width: 6px; background: rgba(2,27,46,0.35); }
+
+/* Water fill */
+.tank-fill {
+  position: absolute;
+  bottom: 0; left: 0; right: 8px; /* leave ruler space */
+  transition: height 1.4s cubic-bezier(0.4, 0, 0.2, 1), background 0.8s ease;
+  overflow: hidden;
+  z-index: 1;
+}
+.tank-fill.w-high { background: linear-gradient(180deg, var(--w-high-top) 0%, var(--w-high-bot) 100%); }
+.tank-fill.w-mid  { background: linear-gradient(180deg, var(--w-mid-top)  0%, var(--w-mid-bot)  100%); }
+.tank-fill.w-low  { background: linear-gradient(180deg, var(--w-low-top)  0%, var(--w-low-bot)  100%); }
+.tank-fill.w-off  { background: linear-gradient(180deg, var(--w-off-top)  0%, var(--w-off-bot)  100%); }
+
+/* Two-layer wave for realism */
+.wave-a, .wave-b {
+  position: absolute;
+  left: -30%; top: -10px;
+  width: 160%; height: 18px;
+  border-radius: 50%;
+  background: inherit;
+}
+.wave-a { opacity: 0.6; animation: wave-a 3s ease-in-out infinite; }
+.wave-b { opacity: 0.35; top: -5px; animation: wave-b 2.1s ease-in-out infinite reverse; }
+@keyframes wave-a {
+  0%,100% { transform: translateX(0)    scaleY(1);    }
+  50%     { transform: translateX(15%)  scaleY(0.7);  }
+}
+@keyframes wave-b {
+  0%,100% { transform: translateX(0)    scaleY(1);    }
+  50%     { transform: translateX(-10%) scaleY(0.65); }
+}
+
+/* Level % text */
+.tank-pct {
+  position: absolute;
+  inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  z-index: 2;
+  letter-spacing: -0.5px;
+}
+/* When level is very low, text goes above water */
+.tank-pct.above-water { color: var(--muted); text-shadow: none; }
+
+/* Tank legs */
+.tank-legs {
+  display: flex; justify-content: space-around;
+  padding: 0 22px;
+  margin: 0 10px 4px;
+}
+.t-leg {
+  width: 5px; height: 8px;
+  background: linear-gradient(180deg, #c0d4e4 0%, #a0b8cc 100%);
+  border-radius: 0 0 3px 3px;
+}
+
+/* Tank info below */
+.tank-info {
+  padding: 6px 10px 10px;
+}
+.tank-name {
+  font-size: 11px; font-weight: 700;
+  color: var(--navy);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tank-loc { font-size: 10px; color: var(--muted-light); margin-top: 1px; }
+.tank-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: 6px; padding: 2px 7px;
+  border-radius: 999px; font-size: 9px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.tank-badge::before { content:""; width:5px; height:5px; border-radius:50%; background:currentColor; }
+.tb-high    { color:#005c4b; background:rgba(0,92,75,0.1); }
+.tb-mid     { color:#bf360c; background:rgba(191,54,12,0.1); }
+.tb-low     { color:#b71c1c; background:rgba(183,28,28,0.12); }
+.tb-offline { color:#455a64; background:rgba(69,90,100,0.1); }
+
+/* Empty state */
+.empty-state { grid-column:1/-1; text-align:center; padding:48px 20px; color:var(--muted); }
+.empty-icon  { font-size:52px; margin-bottom:12px; }
+.empty-title { font-size:17px; font-weight:700; }
+.empty-text  { font-size:13px; margin-top:6px; }
+
+/* =============================================
+   FORMS & INPUTS
+============================================= */
+.form-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:16px; }
+.form-group { display:flex; flex-direction:column; gap:6px; }
+.form-label { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; }
+.form-input {
+  padding:10px 12px; border:1.5px solid var(--border);
+  border-radius: var(--radius-sm); font-size:14px; font-family:inherit;
+  background:#fff; color:var(--text);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.form-input:focus { outline:none; border-color:var(--sky); box-shadow:0 0 0 3px rgba(26,140,204,0.12); }
+
+/* =============================================
+   BUTTONS
+============================================= */
+.btn {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:10px 16px; border-radius:var(--radius-sm);
+  border:none; font-size:14px; font-weight:700;
+  cursor:pointer; transition:all var(--transition);
+  font-family:inherit; white-space:nowrap;
+}
+.btn:disabled { opacity:.5; cursor:default; }
+.btn-primary { background:linear-gradient(135deg,var(--blue),var(--navy-mid)); color:#fff; box-shadow:0 3px 10px rgba(15,95,153,0.3); }
+.btn-primary:hover:not(:disabled) { box-shadow:0 6px 18px rgba(15,95,153,0.45); transform:translateY(-1px); }
+.btn-success { background:linear-gradient(135deg,#00897b,#005c4b); color:#fff; }
+.btn-danger  { background:linear-gradient(135deg,#e53935,#b71c1c); color:#fff; }
+.btn-soft    { background:var(--aqua-soft); color:var(--navy-mid); border:1px solid var(--border); }
+.btn-soft:hover { background:var(--border); }
+.btn-block   { width:100%; justify-content:center; }
+
+/* =============================================
+   ALERTS
+============================================= */
+.alert { padding:12px 16px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; margin-bottom:14px; }
+.alert-success { background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9; }
+.alert-danger  { background:#ffebee; color:#c62828; border:1px solid #ffcdd2; }
+.alert-warning { background:#fff3e0; color:#e65100; border:1px solid #ffe0b2; }
+.alert-info    { background:var(--aqua-soft); color:var(--navy-mid); border:1px solid var(--border); }
+
+/* =============================================
+   DEVICE SECTION – Location Groups
+============================================= */
+.loc-group {
+  border:1.5px solid var(--border-soft);
+  border-radius:var(--radius); overflow:hidden; margin-bottom:12px;
+  background:var(--card);
+}
+.loc-header {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:13px 18px; cursor:pointer; background:var(--surface);
+  border:none; width:100%; font-family:inherit;
+  font-size:14px; font-weight:700; color:var(--navy);
+  transition:background var(--transition);
+}
+.loc-header:hover { background:#e4eff8; }
+.loc-arrow { transition:transform var(--transition); font-size:12px; }
+.loc-content { max-height:0; overflow:hidden; transition:max-height .4s ease; }
+.loc-content.open { max-height:1200px; }
+
+.dev-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:12px 18px; border-top:1px solid var(--border-soft); gap:12px;
+}
+.dev-name { font-size:14px; font-weight:700; }
+.dev-meta { font-size:12px; color:var(--muted); margin-top:2px; line-height:1.4; }
+.dev-actions { display:flex; gap:8px; flex-shrink:0; }
+
+/* =============================================
+   ANALYTICS
+============================================= */
+.pred-grid  { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-bottom:20px; }
+.pred-card  {
+  border-radius:var(--radius); padding:18px;
+  border:1.5px solid var(--border-soft);
+}
+.pred-card.good   { background:linear-gradient(135deg,#e8f5e9,#f1fbf1); border-color:#c8e6c9; }
+.pred-card.warn   { background:linear-gradient(135deg,#fff3e0,#fffde7); border-color:#ffe0b2; }
+.pred-card.bad    { background:linear-gradient(135deg,#ffebee,#fff3f3); border-color:#ffcdd2; }
+.pred-card.info   { background:linear-gradient(135deg,var(--aqua-soft),#f3fbff); border-color:var(--border); }
+.pred-title { font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; color:var(--muted); }
+.pred-main  { font-size:22px; font-weight:800; color:var(--navy); }
+.pred-sub   { font-size:13px; color:var(--muted); margin-top:4px; }
+
+.chart-wrap { position:relative; height:280px; }
+
+.history-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.history-tbl th { padding:10px 12px; text-align:left; background:var(--surface); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); border-bottom:2px solid var(--border-soft); }
+.history-tbl td { padding:10px 12px; border-bottom:1px solid var(--border-soft); }
+.history-tbl tr:last-child td { border-bottom:none; }
+
+/* Account info cards */
+.acc-grid  { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; }
+.acc-tile  { background:var(--surface); border-radius:var(--radius-sm); padding:16px; border:1px solid var(--border-soft); }
+.acc-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--muted-light); margin-bottom:6px; }
+.acc-val   { font-size:20px; font-weight:800; color:var(--navy); }
+
+/* Connection chip */
+.conn-chip {
+  display:inline-flex; align-items:center; gap:7px;
+  padding:8px 14px; border-radius:999px;
+  font-size:12px; font-weight:700;
+  background:var(--card); border:1.5px solid var(--border);
+  color:var(--muted);
+}
+.conn-chip .dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+.conn-chip.connected { color:#2e7d32; border-color:#c8e6c9; background:#e8f5e9; }
+.conn-chip.error     { color:#c62828; border-color:#ffcdd2; background:#ffebee; }
+
+/* =============================================
+   AUTH OVERLAY
+============================================= */
+#auth-overlay {
+  position:fixed; inset:0;
+  background:radial-gradient(ellipse at 20% 80%, rgba(0,188,212,0.18), transparent 40%),
+             linear-gradient(160deg, #e8f4ff 0%, #f0f6fb 60%, #e4eff8 100%);
+  z-index:99999; display:flex; align-items:center; justify-content:center;
+}
+#auth-loading { text-align:center; }
+.auth-drop-anim {
+  font-size:60px; display:block; margin:0 auto 8px;
+  animation: float-drop 2s ease-in-out infinite;
+  filter: drop-shadow(0 6px 16px rgba(0,188,212,0.5));
+}
+@keyframes float-drop {
+  0%,100% { transform:translateY(0); }
+  50%      { transform:translateY(-10px); }
+}
+
+.auth-card {
+  background:#fff; border-radius:20px;
+  box-shadow:0 24px 64px rgba(2,27,46,0.14);
+  width:min(420px, 92vw); padding:36px 32px;
+  text-align:center;
+}
+.auth-logo  { font-size:48px; margin-bottom:4px; }
+.auth-title { font-size:21px; font-weight:800; color:var(--navy); margin-bottom:6px; }
+.auth-sub   { font-size:13px; color:var(--muted); margin-bottom:24px; }
+.auth-err   { color:#c62828; font-size:13px; margin-bottom:12px; font-weight:600; display:none; }
+.auth-toggle{ color:var(--sky); cursor:pointer; font-size:13px; font-weight:700; margin-top:16px; }
+.auth-toggle:hover { color:var(--navy); }
+
+/* =============================================
+   MOBILE TOPBAR
+============================================= */
+.mobile-topbar {
+  display:none; position:sticky; top:0; z-index:80;
+  background:#fff; padding:12px 16px;
+  border-bottom:1px solid var(--border-soft);
+  box-shadow:var(--shadow);
+  align-items:center; gap:12px;
+}
+.hamburger {
+  background:none; border:1.5px solid var(--border);
+  border-radius:8px; padding:7px 11px;
+  font-size:17px; cursor:pointer;
+}
+.mob-title { font-size:16px; font-weight:800; color:var(--navy); }
+
+/* Sidebar overlay for mobile */
+.sidebar-overlay {
+  display:none; position:fixed; inset:0;
+  background:rgba(2,27,46,0.45); z-index:95;
+}
+
+/* =============================================
+   RESPONSIVE
+============================================= */
+@media(max-width:1200px) {
+  .tank-grid { grid-template-columns:repeat(8,minmax(0,1fr)); }
+  .metric-strip { grid-template-columns:repeat(3,1fr); }
+}
+@media(max-width:980px) {
+  .shell { grid-template-columns:1fr; }
+  .sidebar { position:fixed; top:0; left:0; bottom:0; height:100vh; transform:translateX(-100%); transition:transform .22s ease; }
+  body.sidebar-open .sidebar { transform:translateX(0); }
+  body.sidebar-open .sidebar-overlay { display:block; }
+  .main-content { padding:16px; }
+  .mobile-topbar { display:flex; }
+  .tank-grid { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .metric-strip { grid-template-columns:repeat(2,1fr); }
+}
+@media(max-width:640px) {
+  .tank-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .metric-strip { grid-template-columns:repeat(2,1fr); }
+  .form-grid { grid-template-columns:1fr; }
+}
+@media(max-width:420px) {
+  .tank-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+</style>
+</head>
+<body>
+
+<!-- =============================================
+     AUTH OVERLAY
+============================================= -->
+<div id="auth-overlay">
+  <div id="auth-loading">
+    <span class="auth-drop-anim">💧</span>
+    <h2 style="color:var(--navy);font-size:20px;font-weight:800;">Loading AquaWatch…</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:6px;">Connecting to monitoring system</p>
+  </div>
+
+  <div class="auth-card" id="auth-form-container" style="display:none;">
+    <div class="auth-logo">💧</div>
+    <div class="auth-title" id="auth-title">Welcome Back</div>
+    <div class="auth-sub">Sign in to AquaWatch</div>
+    <div class="auth-err" id="auth-error"></div>
+
+    <div class="form-group" style="text-align:left;margin-bottom:14px;">
+      <label class="form-label">Email Address</label>
+      <input type="email" id="auth-email" class="form-input" placeholder="you@example.com">
+    </div>
+    <div class="form-group" style="text-align:left;margin-bottom:20px;">
+      <label class="form-label">Password</label>
+      <input type="password" id="auth-password" class="form-input" placeholder="••••••••">
+    </div>
+
+    <button class="btn btn-primary btn-block" id="auth-btn" onclick="handleAuth()">Sign In</button>
+    <div class="auth-toggle" onclick="toggleAuthMode()" id="auth-toggle">Don't have an account? Sign Up</div>
+  </div>
+</div>
+
+<!-- Mobile topbar -->
+<div class="mobile-topbar">
+  <button class="hamburger" onclick="toggleSidebar()">☰</button>
+  <span class="mob-title">💧 AquaWatch</span>
+</div>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+<div class="shell">
+<!-- =============================================
+     SIDEBAR
+============================================= -->
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-drop">💧</div>
+    <div class="brand-text">
+      <div class="brand-name">AquaWatch</div>
+      <div class="brand-sub">Water Level Monitor</div>
+    </div>
+  </div>
+
+  <ul class="nav-menu">
+    <li class="nav-item">
+      <button class="nav-link active" onclick="showPage('dashboard')">
+        <span class="nav-icon">📊</span> Dashboard
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" onclick="showPage('analytics')">
+        <span class="nav-icon">📈</span> Analytics
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" onclick="showPage('devices')">
+        <span class="nav-icon">🔌</span> Devices
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" onclick="showPage('account')">
+        <span class="nav-icon">👤</span> Account
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link danger" onclick="logoutUser()">
+        <span class="nav-icon">🚪</span> Logout
+      </button>
+    </li>
+  </ul>
+
+  <div class="sidebar-footer">AquaWatch © 2026</div>
+</aside>
+
+<!-- =============================================
+     MAIN
+============================================= -->
+<main class="main-content">
+
+<!-- ── DASHBOARD ── -->
+<section id="dashboard-section" class="page-section active">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Water Level Dashboard</h1>
+      <p class="page-subtitle">Live status of all monitored water tanks</p>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <div class="conn-chip" id="conn-chip"><span class="dot"></span>Connecting…</div>
+    </div>
+  </div>
+
+  <!-- Location bar -->
+  <div class="loc-bar">
+    <span class="loc-bar-label">📍 Location</span>
+    <select id="dashLocSelect" class="form-input" style="width:min(220px,100%);" onchange="onLocationChange()"></select>
+    <span class="loc-updated" id="loc-updated">—</span>
+  </div>
+
+  <!-- Metrics -->
+  <div class="metric-strip">
+    <div class="metric-tile"><div class="metric-tile-label">Total Tanks</div><div class="metric-tile-val" id="m-total">0</div></div>
+    <div class="metric-tile"><div class="metric-tile-label">High ≥ 70%</div><div class="metric-tile-val c-high" id="m-high">0</div></div>
+    <div class="metric-tile"><div class="metric-tile-label">Medium 30–69%</div><div class="metric-tile-val c-mid" id="m-mid">0</div></div>
+    <div class="metric-tile"><div class="metric-tile-label">Low &lt; 30%</div><div class="metric-tile-val c-low" id="m-low">0</div></div>
+    <div class="metric-tile"><div class="metric-tile-label">Offline</div><div class="metric-tile-val c-offline" id="m-offline">0</div></div>
+  </div>
+
+  <!-- Tank grid card -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title" id="grid-label">All Tanks</span>
+    </div>
+    <div id="page-nav-top" class="page-nav"></div>
+    <div id="tank-grid" class="tank-grid"></div>
+    <div id="page-nav-bot" class="page-nav"></div>
+  </div>
+</section>
+
+<!-- ── ANALYTICS ── -->
+<section id="analytics-section" class="page-section">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Analytics & Predictions</h1>
+      <p class="page-subtitle">Consumption trends and AI-powered pump scheduling</p>
+    </div>
+  </div>
+
+  <div id="analytics-alert" class="alert" style="display:none;"></div>
+
+  <!-- Filter bar -->
+  <div class="loc-bar" style="margin-bottom:20px;">
+    <span class="loc-bar-label">📍 Location</span>
+    <select id="anaLocSelect" class="form-input" style="width:min(190px,100%);" onchange="loadAnaDevices()"></select>
+    <span class="loc-bar-label">🪣 Tank</span>
+    <select id="anaDevSelect" class="form-input" style="width:min(190px,100%);" onchange="renderAnalytics()"></select>
+    <button class="btn btn-primary" onclick="renderAnalytics()">↺ Refresh</button>
+  </div>
+
+  <!-- Prediction cards -->
+  <div id="pred-grid" class="pred-grid"></div>
+
+  <!-- Level history chart -->
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-header"><span class="card-title">7-Day Water Level History</span></div>
+    <div class="chart-wrap"><canvas id="chartLevel"></canvas></div>
+  </div>
+
+  <!-- Consumption chart -->
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-header"><span class="card-title">Daily Water Consumption (%/day)</span></div>
+    <div class="chart-wrap"><canvas id="chartConsumption"></canvas></div>
+  </div>
+
+  <!-- History table -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">History Log</span></div>
+    <div style="overflow-x:auto;">
+      <table class="history-tbl">
+        <thead>
+          <tr>
+            <th>Date</th><th>Avg Level</th><th>Min</th><th>Max</th>
+            <th>Consumption</th><th>Pump Events (est.)</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ── DEVICES ── -->
+<section id="devices-section" class="page-section">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Device Manager</h1>
+      <p class="page-subtitle">Register water tanks and assign them to locations</p>
+    </div>
+  </div>
+
+  <div id="dev-alert" class="alert" style="display:none;"></div>
+
+  <!-- Add form -->
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-header"><span class="card-title">Add New Tank</span></div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Existing Location</label>
+        <select id="existLocSel" class="form-input"><option value="">— Select —</option></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Create New Location</label>
+        <input id="newLocInp" class="form-input" placeholder="e.g. Hall 2, Admin Block">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Device ID (from ESP32)</label>
+        <input id="newDevId" class="form-input" placeholder="e.g. TANK001">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Custom Tank Name</label>
+        <input id="newDevName" class="form-input" placeholder="e.g. Main Roof Tank">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Capacity (litres)</label>
+        <input id="newCapacity" type="number" class="form-input" placeholder="e.g. 1000" min="1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tank Height (cm)</label>
+        <input id="newHeight" type="number" class="form-input" placeholder="e.g. 150" min="1">
+      </div>
+    </div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-primary" onclick="addDevice()">💾 Add Tank</button>
+    </div>
+  </div>
+
+  <!-- Saved devices -->
+  <div class="card">
+    <div class="card-header"><span class="card-title">Saved Tanks</span></div>
+    <div id="dev-list"></div>
+  </div>
+</section>
+
+<!-- ── ACCOUNT ── -->
+<section id="account-section" class="page-section">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Account</h1>
+      <p class="page-subtitle">Your profile and system overview</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-header"><span class="card-title">Account Details</span></div>
+    <div class="acc-grid">
+      <div class="acc-tile"><div class="acc-label">Email</div><div class="acc-val" id="acc-email" style="font-size:14px;word-break:break-all;">—</div></div>
+      <div class="acc-tile"><div class="acc-label">Total Tanks</div><div class="acc-val" id="acc-tanks">0</div></div>
+      <div class="acc-tile"><div class="acc-label">Locations</div><div class="acc-val" id="acc-locs">0</div></div>
+      <div class="acc-tile"><div class="acc-label">Online Now</div><div class="acc-val c-high" id="acc-online">0</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title">System Status</span></div>
+    <div id="acc-overview">—</div>
+  </div>
+</section>
+
+<div style="margin-top:28px;padding-top:14px;border-top:1px solid var(--border-soft);font-size:12px;color:var(--muted-light);text-align:center;">
+  AquaWatch – IoT Water Level Monitoring System © 2026
+</div>
+</main>
+</div><!-- /shell -->
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
+
+<script>
+/* =============================================
+   ★ CONFIGURATION – replace these values
+   -------------------------------------------
+   1. Firebase: create a new project at console.firebase.google.com
+      and paste your config below.
+   2. MQTT: your HiveMQ (or other broker) WSS URL + credentials.
+   3. MQTT Topics published by ESP32:
+        Publish  → water_tank/{DEVICE_ID}/telemetry
+        Payload  → {"level":75,"distance":37.5,"pump":false}
+        where "level" = 0-100% calculated on the ESP32
+        and "distance" = raw ultrasonic reading in cm
+   4. Pump command topic (optional):
+        Subscribe → water_tank/{DEVICE_ID}/pump/set
+        Payload   → {"state":true}
+============================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBfSayFgfufPD5V27Os9d5DDhIt-SF0xcg",
+  authDomain: "watermanagement-fa89c.firebaseapp.com",
+  projectId: "watermanagement-fa89c",
+  storageBucket: "watermanagement-fa89c.firebasestorage.app",
+  messagingSenderId: "186250585381",
+  appId: "1:186250585381:web:78c25d054a007f50b726cc"
+};
+
+const MQTT_CONFIG = {
+  brokerUrl: "wss://YOUR_HIVEMQ_HOST:8884/mqtt",
+  username:  "YOUR_MQTT_USERNAME",
+  password:  "YOUR_MQTT_PASSWORD",
+  rootTopic: "water_tank" // ESP32 publishes to water_tank/{id}/telemetry
+};
+
+const OFFLINE_MS  = 15000;  // mark device offline after 15 s of silence
+const PAGE_SIZE   = 40;     // tanks per grid page
+const DEVICES_KEY = "aw_devices_v1";
+const HISTORY_KEY = "aw_history_v1";
+
+/* =============================================
+   FIREBASE INIT
+============================================= */
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+let currentUser = null;
+let isLoginMode = true;
+let cloudReady  = false;
+
+/* =============================================
+   AUTH
+============================================= */
+function toggleAuthMode() {
+  isLoginMode = !isLoginMode;
+  document.getElementById("auth-title").textContent  = isLoginMode ? "Welcome Back"    : "Create Account";
+  document.getElementById("auth-btn").textContent    = isLoginMode ? "Sign In"         : "Sign Up";
+  document.getElementById("auth-toggle").textContent = isLoginMode ? "Don't have an account? Sign Up" : "Already have an account? Sign In";
+  document.getElementById("auth-error").style.display = "Incorrect email or password.";
+}
+
+async function handleAuth() {
+  const email = document.getElementById("auth-email").value.trim();
+  const pass  = document.getElementById("auth-password").value.trim();
+  const err   = document.getElementById("auth-error");
+  const btn   = document.getElementById("auth-btn");
+
+  err.style.display = "none";
+  if (!email || !pass) { err.textContent = "Please fill in all fields."; err.style.display="block"; return; }
+
+  btn.disabled = true; btn.textContent = "Processing…";
+  try {
+    if (isLoginMode) await auth.signInWithEmailAndPassword(email, pass);
+    else             await auth.createUserWithEmailAndPassword(email, pass);
+  } catch (e) {
+    err.textContent = e.message; err.style.display = "block";
+    btn.disabled = false; btn.textContent = isLoginMode ? "Sign In" : "Sign Up";
+  }
+}
+
+function logoutUser() {
+  if (!confirm("Logout?")) return;
+  auth.signOut();
+}
+
+auth.onAuthStateChanged(async user => {
+  document.getElementById("auth-loading").style.display = "none";
+  if (user) {
+    currentUser = user;
+    document.getElementById("auth-overlay").style.display = "none";
+    document.getElementById("acc-email").textContent = user.email;
+    await pullCloud();
+    initMQTT();
+    hydrateUI();
+  } else {
+    currentUser = null;
+    document.getElementById("auth-overlay").style.display = "flex";
+    document.getElementById("auth-form-container").style.display = "block";
+    const btn = document.getElementById("auth-btn");
+    btn.disabled = false; btn.textContent = "Sign In";
+  }
+});
+
+/* =============================================
+   CLOUD SYNC
+============================================= */
+async function pullCloud() {
+  if (!currentUser) return;
+  try {
+    const doc = await db.collection("aquawatch_users").doc(currentUser.uid).get();
+    if (doc.exists) {
+      const d = doc.data();
+      if (d.devices) localStorage.setItem(DEVICES_KEY, JSON.stringify(d.devices));
+      if (d.history) localStorage.setItem(HISTORY_KEY, JSON.stringify(d.history));
+    }
+  } catch(e) { console.warn("Cloud pull:", e); }
+  cloudReady = true;
+}
+
+async function pushCloud() {
+  if (!currentUser || !cloudReady) return;
+  try {
+    await db.collection("aquawatch_users").doc(currentUser.uid).set({
+      devices: loadDevices(),
+      history: loadHistory(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+  } catch(e) { console.warn("Cloud push:", e); }
+}
+
+/* =============================================
+   DEVICE STORAGE
+============================================= */
+function loadDevices() {
+  try { return JSON.parse(localStorage.getItem(DEVICES_KEY)) || []; }
+  catch { return []; }
+}
+function saveDevices(d) { localStorage.setItem(DEVICES_KEY, JSON.stringify(d)); pushCloud(); }
+function getLocations() { return [...new Set(loadDevices().map(d=>d.location).filter(Boolean))]; }
+function loadHistory()  {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveHistory(h) { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); }
+
+/* =============================================
+   LIVE DATA
+============================================= */
+const LIVE = {};   // {deviceId: {level, pump, distance, lastSeen}}
+
+function isOffline(deviceId) {
+  const d = LIVE[deviceId];
+  return !d || (Date.now() - d.lastSeen > OFFLINE_MS);
+}
+
+function levelClass(level, offline) {
+  if (offline)    return "w-off";
+  if (level >= 70) return "w-high";
+  if (level >= 30) return "w-mid";
+  return "w-low";
+}
+function badgeClass(level, offline) {
+  if (offline)    return "tb-offline";
+  if (level >= 70) return "tb-high";
+  if (level >= 30) return "tb-mid";
+  return "tb-low";
+}
+function badgeText(level, offline) {
+  if (offline)    return "OFFLINE";
+  if (level >= 70) return `HIGH ${level}%`;
+  if (level >= 30) return `MED ${level}%`;
+  return `LOW ${level}%`;
+}
+
+/* =============================================
+   HISTORY TRACKING
+============================================= */
+function storeLevelReading(deviceId, level) {
+  const today = new Date().toISOString().slice(0,10);
+  const h = loadHistory();
+  if (!h[deviceId])        h[deviceId] = {};
+  if (!h[deviceId][today]) h[deviceId][today] = { readings:[], min:100, max:0 };
+  const day = h[deviceId][today];
+  day.readings.push(level);
+  if (day.readings.length > 300) day.readings.shift();
+  day.min = Math.min(day.min, level);
+  day.max = Math.max(day.max, level);
+  day.avg = Math.round(day.readings.reduce((a,b)=>a+b,0)/day.readings.length);
+  saveHistory(h);
+  if (Math.random() < 0.04) pushCloud();
+}
+
+function getDeviceHistory(deviceId, days=7) {
+  const h = loadHistory()[deviceId] || {};
+  const rows = [];
+  for (let i=days-1; i>=0; i--) {
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const key = d.toISOString().slice(0,10);
+    const day = h[key];
+    rows.push({
+      date: key,
+      label: d.toLocaleDateString('en-GB', {day:'2-digit', month:'short'}),
+      avg: day?.avg ?? null, min: day?.min ?? null, max: day?.max ?? null,
+      consumption: null
+    });
+  }
+  // Consumption = drop from previous day's max to current day's min
+  for (let i=1; i<rows.length; i++) {
+    if (rows[i-1].max !== null && rows[i].min !== null) {
+      rows[i].consumption = Math.max(0, rows[i-1].max - rows[i].min);
+    }
+  }
+  return rows;
+}
+
+/* =============================================
+   ML PREDICTIONS (Linear Regression)
+============================================= */
+function linearRegression(values) {
+  const pts = values.map((y,x)=>y!==null?[x,y]:null).filter(Boolean);
+  const n   = pts.length;
+  if (n<2) return { slope:0, intercept: values.find(v=>v!==null) ?? 50 };
+  const sx=pts.reduce((s,[x])=>s+x,0), sy=pts.reduce((s,[,y])=>s+y,0);
+  const sxx=pts.reduce((s,[x])=>s+x*x,0), sxy=pts.reduce((s,[x,y])=>s+x*y,0);
+  const slope = (n*sxy - sx*sy) / (n*sxx - sx*sx);
+  const intercept = (sy - slope*sx) / n;
+  return {slope, intercept};
+}
+
+function predict(deviceId, histRows) {
+  const avgs = histRows.map(r=>r.avg);
+  const cons = histRows.map(r=>r.consumption).filter(v=>v!==null);
+  const {slope, intercept} = linearRegression(avgs);
+  const n = avgs.length;
+  const clamp = v => Math.max(0, Math.min(100, v));
+  const pred24 = clamp(slope*n     + intercept);
+  const pred48 = clamp(slope*(n+1) + intercept);
+  const pred72 = clamp(slope*(n+2) + intercept);
+  const avgCons = cons.length ? cons.reduce((a,b)=>a+b,0)/cons.length : 0;
+  const cur = LIVE[deviceId]?.level ?? (avgs.at(-1) ?? 50);
+  const daysToLow   = avgCons>0 ? Math.round(Math.max(0,cur-30)/avgCons) : null;
+  const daysToEmpty = avgCons>0 ? Math.round(cur/avgCons) : null;
+  return { pred24, pred48, pred72, avgCons, cur, slope, daysToLow, daysToEmpty };
+}
+
+/* =============================================
+   MQTT
+============================================= */
+let mqttClient = null;
+
+function initMQTT() {
+  try {
+    mqttClient = mqtt.connect(MQTT_CONFIG.brokerUrl, {
+      username: MQTT_CONFIG.username,
+      password: MQTT_CONFIG.password,
+      clean: true, keepalive: 60, reconnectPeriod: 5000, connectTimeout: 30000
+    });
+  } catch(e) { console.warn("MQTT init failed:", e); return; }
+
+  mqttClient.on("connect", () => {
+    setChip("MQTT Connected", true);
+    mqttClient.subscribe(`${MQTT_CONFIG.rootTopic}/+/telemetry`);
+    mqttClient.subscribe(`${MQTT_CONFIG.rootTopic}/+/pump/state`);
+  });
+
+  mqttClient.on("message", (topic, payload) => {
+    const parts = topic.split("/");
+    if (parts.length < 3) return;
+    const deviceId = parts[1];
+    let data;
+    try { data = JSON.parse(payload.toString()); } catch { return; }
+
+    if (topic.endsWith("/telemetry")) {
+      LIVE[deviceId] = {
+        level:    Math.round(Math.min(100, Math.max(0, Number(data.level ?? data.waterLevel ?? 0)))),
+        pump:     !!data.pump,
+        distance: Number(data.distance ?? 0),
+        lastSeen: Date.now()
+      };
+      storeLevelReading(deviceId, LIVE[deviceId].level);
+      document.getElementById("loc-updated").textContent = `Updated: ${new Date().toLocaleTimeString()}`;
+    }
+    if (topic.endsWith("/pump/state")) {
+      if (LIVE[deviceId]) LIVE[deviceId].pump = !!data.state;
+    }
+
+    if (document.getElementById("dashboard-section").classList.contains("active")) renderDashboard();
+  });
+
+  mqttClient.on("reconnect", () => setChip("Reconnecting…", false));
+  mqttClient.on("offline",   () => setChip("MQTT Offline", false, true));
+  mqttClient.on("error",     e => { console.error("MQTT:", e); setChip("MQTT Error", false, true); });
+}
+
+function setChip(text, ok, err=false) {
+  const chip = document.getElementById("conn-chip");
+  chip.textContent = text;
+  chip.className = "conn-chip" + (ok?" connected":"") + (err?" error":"");
+}
+
+/* =============================================
+   DEVICE MANAGEMENT
+============================================= */
+function addDevice() {
+  const existLoc = document.getElementById("existLocSel").value.trim();
+  const newLoc   = document.getElementById("newLocInp").value.trim();
+  const devId    = document.getElementById("newDevId").value.trim();
+  const devName  = document.getElementById("newDevName").value.trim();
+  const capacity = document.getElementById("newCapacity").value.trim();
+  const height   = document.getElementById("newHeight").value.trim();
+  const location = newLoc || existLoc;
+
+  if (!location) return showAlertEl("Location is required.", "danger", "dev-alert");
+  if (!devId)    return showAlertEl("Device ID is required.", "danger", "dev-alert");
+  if (!devName)  return showAlertEl("Tank name is required.", "danger", "dev-alert");
+
+  const devices = loadDevices();
+  if (devices.some(d=>d.deviceId===devId))
+    return showAlertEl("A device with this ID already exists.", "danger", "dev-alert");
+
+  devices.push({ deviceId:devId, displayName:devName, location, capacity:capacity?+capacity:null, height:height?+height:null });
+  saveDevices(devices);
+
+  ["newLocInp","newDevId","newDevName","newCapacity","newHeight"].forEach(id => { document.getElementById(id).value=""; });
+  renderAll();
+  showAlertEl("Tank added! 🎉", "success", "dev-alert");
+}
+
+function removeDevice(id) {
+  if (!confirm("Remove this tank?")) return;
+  saveDevices(loadDevices().filter(d=>d.deviceId!==id));
+  renderAll();
+  showAlertEl("Tank removed.", "success", "dev-alert");
+}
+
+function renameDevice(id) {
+  const devices = loadDevices();
+  const d = devices.find(x=>x.deviceId===id); if(!d) return;
+  const n = prompt("New name:", d.displayName); if(!n?.trim()) return;
+  d.displayName = n.trim(); saveDevices(devices); renderAll();
+}
+
+/* =============================================
+   DASHBOARD RENDERING
+============================================= */
+let STATE = { location:"", page:1 };
+
+function hydrateUI() {
+  renderLocationSelects();
+  renderDashboard();
+  renderDevicesTable();
+  updateAccount();
+  // Offline watchdog
+  setInterval(() => {
+    if (document.getElementById("dashboard-section").classList.contains("active")) renderDashboard();
+    if (document.getElementById("devices-section").classList.contains("active")) renderDevicesTable();
+    updateAccount();
+  }, 5000);
+}
+
+function renderAll() {
+  renderLocationSelects();
+  renderDashboard();
+  renderDevicesTable();
+  updateAccount();
+}
+
+function renderLocationSelects() {
+  const locs = getLocations();
+  const fill = (sel, withPlaceholder=false) => {
+    sel.innerHTML = (withPlaceholder ? "<option value=''>— Select —</option>" : "")
+      + locs.map(l=>`<option value="${esc(l)}">${esc(l)}</option>`).join("");
+  };
+  fill(document.getElementById("dashLocSelect"));
+  fill(document.getElementById("existLocSel"), true);
+  const ana = document.getElementById("anaLocSelect");
+  fill(ana);
+
+  if (!STATE.location && locs.length) STATE.location = locs[0];
+  if (STATE.location) document.getElementById("dashLocSelect").value = STATE.location;
+  if (locs.length) ana.value = locs[0];
+  loadAnaDevices();
+}
+
+function onLocationChange() {
+  STATE.location = document.getElementById("dashLocSelect").value;
+  STATE.page = 1;
+  renderDashboard();
+}
+
+function renderDashboard() {
+  const loc     = STATE.location || getLocations()[0] || "";
+  const devices = loadDevices().filter(d=>d.location===loc);
+
+  let high=0, mid=0, low=0, off=0;
+  devices.forEach(d => {
+    if (isOffline(d.deviceId)) { off++; return; }
+    const lv = LIVE[d.deviceId].level;
+    if (lv>=70) high++; else if (lv>=30) mid++; else low++;
+  });
+
+  document.getElementById("m-total").textContent   = devices.length;
+  document.getElementById("m-high").textContent    = high;
+  document.getElementById("m-mid").textContent     = mid;
+  document.getElementById("m-low").textContent     = low;
+  document.getElementById("m-offline").textContent = off;
+  document.getElementById("grid-label").textContent = loc ? `${loc} – Water Tanks` : "Select a location";
+
+  const totalPages = Math.max(1, Math.ceil(devices.length/PAGE_SIZE));
+  STATE.page = Math.min(STATE.page, totalPages);
+  const start = (STATE.page-1)*PAGE_SIZE;
+  const page  = devices.slice(start, start+PAGE_SIZE);
+
+  document.getElementById("tank-grid").innerHTML = page.length
+    ? page.map(renderTankCard).join("")
+    : `<div class="empty-state"><div class="empty-icon">🪣</div><div class="empty-title">No tanks in this location.</div><div class="empty-text">Add tanks from the Devices section.</div></div>`;
+
+  renderPageNav(totalPages);
+  updateAccount();
+}
+
+function renderTankCard(device) {
+  const offline = isOffline(device.deviceId);
+  const level   = offline ? 0 : (LIVE[device.deviceId]?.level ?? 0);
+  const wClass  = levelClass(level, offline);
+  const bClass  = badgeClass(level, offline);
+  const bText   = badgeText(level, offline);
+  const isCrit  = !offline && level<30;
+  const fillH   = offline ? 100 : level; // offline fills with grey 100%
+
+  // When level is very low (≤12%), show % text above water
+  const pctAbove = !offline && level <= 12;
+
+  // Ruler ticks: 100%, 75%, 50%, 25%, 0% positions
+  const ticks = [0,1,2,3,4].map((i,_,a) =>
+    `<div class="tick ${i===0||i===4?'major':''}" style="margin-top:${i===0?'0':'auto'};"></div>`
+  ).join("");
+
+  return `
+    <div class="tank-card${isCrit?' critical':''}" title="${esc(device.displayName)} — ${bText}">
+      <div class="tank-cap"></div>
+      <div class="tank-body-wrap">
+        <div class="tank-fill ${wClass}" style="height:${fillH}%;">
+          ${!offline?'<div class="wave-a"></div><div class="wave-b"></div>':''}
+        </div>
+        <div class="tank-ruler">${ticks}</div>
+        <div class="tank-pct${pctAbove?' above-water':''}">${offline?'—':level+'%'}</div>
+      </div>
+      <div class="tank-legs"><div class="t-leg"></div><div class="t-leg"></div></div>
+      <div class="tank-info">
+        <div class="tank-name" title="${esc(device.displayName)}">${esc(device.displayName)}</div>
+        <div class="tank-loc">${esc(device.location)}</div>
+        <span class="tank-badge ${bClass}">${bText}</span>
+      </div>
+    </div>`;
+}
+
+function renderPageNav(total) {
+  if (total<=1) {
+    document.getElementById("page-nav-top").innerHTML = "";
+    document.getElementById("page-nav-bot").innerHTML = "";
+    return;
+  }
+  const html = Array.from({length:total},(_,i)=>
+    `<button class="pn-btn${i+1===STATE.page?' active':''}" onclick="setPage(${i+1})">${i+1}</button>`
+  ).join("");
+  document.getElementById("page-nav-top").innerHTML = html;
+  document.getElementById("page-nav-bot").innerHTML = html;
+}
+
+function setPage(p) { STATE.page=p; renderDashboard(); }
+
+/* =============================================
+   DEVICES TABLE
+============================================= */
+function renderDevicesTable() {
+  const container = document.getElementById("dev-list");
+  const devices   = loadDevices();
+
+  if (!devices.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔌</div><div class="empty-title">No tanks yet.</div></div>`;
+    return;
+  }
+  const grouped = devices.reduce((acc,d) => {
+    (acc[d.location||"Unassigned"]=acc[d.location||"Unassigned"]||[]).push(d);
+    return acc;
+  }, {});
+
+  container.innerHTML = Object.entries(grouped).map(([loc,list],i) => {
+    const gid = `grp${i}`;
+    return `
+      <div class="loc-group">
+        <button class="loc-header" onclick="toggleGroup('${gid}','arr${i}')">
+          <span>📍 ${esc(loc)} <span style="color:var(--muted-light);font-weight:500;">(${list.length})</span></span>
+          <span class="loc-arrow" id="arr${i}">▼</span>
+        </button>
+        <div class="loc-content" id="${gid}">
+          ${list.map(d=>{
+            const off = isOffline(d.deviceId);
+            const lv  = LIVE[d.deviceId]?.level;
+            return `
+              <div class="dev-row">
+                <div>
+                  <div class="dev-name">${esc(d.displayName)}</div>
+                  <div class="dev-meta">
+                    ID: <b>${esc(d.deviceId)}</b>
+                    ${d.capacity?` • ${d.capacity}L`:''}
+                    ${d.height?` • ${d.height}cm tall`:''}
+                    • Status: <b>${off?'OFFLINE':(lv+'%')}</b>
+                    ${!off&&LIVE[d.deviceId]?.pump?' • 🔴 Pump ON':''}
+                  </div>
+                </div>
+                <div class="dev-actions">
+                  <button class="btn btn-soft" onclick="renameDevice('${d.deviceId}')" style="padding:6px 10px;font-size:12px;">Rename</button>
+                  <button class="btn btn-danger" onclick="removeDevice('${d.deviceId}')" style="padding:6px 10px;font-size:12px;">Remove</button>
+                </div>
+              </div>`;
+          }).join("")}
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function toggleGroup(gid, arrid) {
+  document.getElementById(gid).classList.toggle("open");
+  document.getElementById(arrid).textContent =
+    document.getElementById(gid).classList.contains("open") ? "▲" : "▼";
+}
+
+/* =============================================
+   ACCOUNT SECTION
+============================================= */
+function updateAccount() {
+  const devices = loadDevices();
+  const online  = devices.filter(d=>!isOffline(d.deviceId)).length;
+  document.getElementById("acc-tanks").textContent  = devices.length;
+  document.getElementById("acc-locs").textContent   = getLocations().length;
+  document.getElementById("acc-online").textContent = online;
+
+  const lows = devices.filter(d=>!isOffline(d.deviceId)&&(LIVE[d.deviceId]?.level??100)<30);
+  const avgs = devices.map(d=>LIVE[d.deviceId]?.level).filter(v=>v!==undefined);
+  const avgLv = avgs.length ? (avgs.reduce((a,b)=>a+b,0)/avgs.length).toFixed(1) : "—";
+
+  document.getElementById("acc-overview").innerHTML = `
+    <div class="acc-grid">
+      <div class="acc-tile"><div class="acc-label">Avg Level (All)</div>
+        <div class="acc-val">${avgLv}${avgs.length?"%":""}</div></div>
+      <div class="acc-tile"><div class="acc-label">Critical Tanks (&lt;30%)</div>
+        <div class="acc-val" style="color:var(--w-low-bot);">${lows.length}</div></div>
+      <div class="acc-tile"><div class="acc-label">Offline Tanks</div>
+        <div class="acc-val" style="color:var(--w-off-bot);">${devices.length-online}</div></div>
+    </div>
+    ${lows.length?`<div class="alert alert-danger" style="margin-top:14px;">⚠️ Critical: ${lows.map(d=>d.displayName).join(", ")} ${lows.length===1?"is":"are"} below 30%.</div>`:""}
+  `;
+}
+
+/* =============================================
+   ANALYTICS SECTION
+============================================= */
+let chartLevel=null, chartCons=null;
+
+function loadAnaDevices() {
+  const loc     = document.getElementById("anaLocSelect").value;
+  const devices = loadDevices().filter(d=>d.location===loc);
+  const sel     = document.getElementById("anaDevSelect");
+  sel.innerHTML = devices.map(d=>`<option value="${esc(d.deviceId)}">${esc(d.displayName)}</option>`).join("")
+    || "<option value=''>No devices</option>";
+  if (devices.length) renderAnalytics();
+}
+
+function renderAnalytics() {
+  const deviceId = document.getElementById("anaDevSelect").value;
+  if (!deviceId) return;
+  const rows = getDeviceHistory(deviceId, 7);
+  const pred = predict(deviceId, rows);
+  renderPredCards(pred);
+  renderLevelChart(rows, pred, deviceId);
+  renderConsChart(rows);
+  renderHistTable(rows);
+}
+
+function renderPredCards(pred) {
+  let advice="", advClass="info";
+  if      (pred.cur < 20)                      { advice="⚠️ Tank critically low! Activate pump now."; advClass="bad"; }
+  else if (pred.daysToLow!==null&&pred.daysToLow<=1){ advice=`Tank reaches LOW level tomorrow. Start pump soon.`; advClass="warn"; }
+  else if (pred.daysToLow!==null&&pred.daysToLow<=3){ advice=`Tank reaches LOW in ~${pred.daysToLow} day(s). Plan accordingly.`; advClass="warn"; }
+  else if (pred.slope < -3)                    { advice="High consumption today. Consider filling sooner."; advClass="warn"; }
+  else                                          { advice="Tank levels are stable. No immediate action needed."; advClass="good"; }
+
+  const trendIcon = pred.slope<-1?"📉 Declining":pred.slope>1?"📈 Rising":"➡️ Stable";
+  const pump1h    = pred.avgCons>0 ? Math.round(pred.avgCons/24*60)+" min/hr equiv." : "—";
+
+  document.getElementById("pred-grid").innerHTML = `
+    <div class="pred-card ${advClass}">
+      <div class="pred-title">🤖 Pump Recommendation</div>
+      <div class="pred-main" style="font-size:15px;margin-bottom:4px;">${advice}</div>
+      ${pred.daysToEmpty!==null?`<div class="pred-sub">Est. days to empty if no refill: <b>${pred.daysToEmpty}</b></div>`:""}
+    </div>
+    <div class="pred-card info">
+      <div class="pred-title">📊 3-Day Forecast</div>
+      <div class="pred-main">${pred.pred24.toFixed(1)}%</div>
+      <div class="pred-sub">Tomorrow · In 2 days: <b>${pred.pred48.toFixed(1)}%</b> · In 3 days: <b>${pred.pred72.toFixed(1)}%</b></div>
+    </div>
+    <div class="pred-card ${pred.avgCons>15?'warn':'good'}">
+      <div class="pred-title">💧 Consumption Rate</div>
+      <div class="pred-main">${pred.avgCons.toFixed(1)}%</div>
+      <div class="pred-sub">per day · Trend: ${trendIcon}</div>
+    </div>
+  `;
+}
+
+function renderLevelChart(rows, pred, deviceId) {
+  const ctx = document.getElementById("chartLevel").getContext("2d");
+  if (chartLevel) chartLevel.destroy();
+  const n = rows.length;
+  chartLevel = new Chart(ctx, {
+    type:"line",
+    data:{
+      labels:[...rows.map(r=>r.label),"+1d","+2d","+3d"],
+      datasets:[
+        { label:"Avg Level (%)", data:rows.map(r=>r.avg), fill:true,
+          borderColor:"#0f5f99", backgroundColor:"rgba(15,95,153,0.12)",
+          tension:0.4, borderWidth:2, pointRadius:4, pointBackgroundColor:"#0f5f99" },
+        { label:"Min / Max Range", data:rows.map(r=>r.min),
+          borderColor:"rgba(183,28,28,0.4)", borderDash:[3,3], fill:false,
+          tension:0.4, borderWidth:1.5, pointRadius:0 },
+        { label:"Predicted (%)", data:[...Array(n).fill(null), pred.pred24, pred.pred48, pred.pred72],
+          borderColor:"#00bcd4", borderDash:[6,3], fill:false,
+          tension:0.4, borderWidth:2, pointRadius:5, pointBackgroundColor:"#00bcd4" }
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{
+        y:{ min:0, max:100, ticks:{ callback:v=>v+"%" },
+            grid:{ color:"rgba(0,0,0,0.04)" }
+        }
+      },
+      plugins:{
+        legend:{ position:"top" },
+        tooltip:{ callbacks:{ label:c=>` ${c.dataset.label}: ${c.raw?.toFixed(1)}%` } }
+      }
+    }
+  });
+}
+
+function renderConsChart(rows) {
+  const ctx = document.getElementById("chartConsumption").getContext("2d");
+  if (chartCons) chartCons.destroy();
+  chartCons = new Chart(ctx, {
+    type:"bar",
+    data:{
+      labels:rows.map(r=>r.label),
+      datasets:[{
+        label:"Consumption (%/day)",
+        data:rows.map(r=>r.consumption),
+        backgroundColor:rows.map(r=>{
+          if (r.consumption===null) return "#e0e0e0";
+          if (r.consumption>20) return "#e53935";
+          if (r.consumption>10) return "#fb8c00";
+          return "#00897b";
+        }),
+        borderRadius:5
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>v+"%" } } },
+      plugins:{ legend:{ position:"top" } }
+    }
+  });
+}
+
+function renderHistTable(rows) {
+  const pumpEst = c => {
+    if (c===null) return "—";
+    if (c<5)  return "Likely none";
+    if (c<15) return "~1 hr";
+    if (c<25) return "~2–3 hr";
+    return "3+ hr (high use)";
+  };
+  const levelColor = v => v===null?"var(--muted)":v>=70?"var(--w-high-bot)":v>=30?"var(--w-mid-bot)":"var(--w-low-bot)";
+
+  document.getElementById("history-tbody").innerHTML = rows.map(r=>`
+    <tr>
+      <td>${r.date}</td>
+      <td style="color:${levelColor(r.avg)};font-weight:700;">${r.avg!==null?r.avg+"%":"—"}</td>
+      <td>${r.min!==null?r.min+"%":"—"}</td>
+      <td>${r.max!==null?r.max+"%":"—"}</td>
+      <td style="color:${r.consumption>20?"var(--w-low-bot)":r.consumption>10?"var(--w-mid-bot)":"var(--w-high-bot)"};font-weight:700;">
+        ${r.consumption!==null?r.consumption.toFixed(1)+"%":"—"}
+      </td>
+      <td style="color:var(--muted);">${pumpEst(r.consumption)}</td>
+    </tr>
+  `).join("");
+}
+
+/* =============================================
+   PAGE NAVIGATION
+============================================= */
+function showPage(page) {
+  document.querySelectorAll(".page-section").forEach(s=>s.classList.remove("active"));
+  document.getElementById(`${page}-section`).classList.add("active");
+  document.querySelectorAll(".nav-link").forEach(l=>l.classList.remove("active"));
+  document.querySelector(`.nav-link[onclick*="'${page}'"]`)?.classList.add("active");
+  closeSidebar();
+  if (page==="analytics") { renderLocationSelects(); loadAnaDevices(); }
+  if (page==="devices")   { renderDevicesTable(); renderLocationSelects(); }
+  if (page==="account")   { updateAccount(); }
+}
+
+/* =============================================
+   SIDEBAR MOBILE
+============================================= */
+function toggleSidebar() { document.body.classList.toggle("sidebar-open"); }
+function closeSidebar()   { document.body.classList.remove("sidebar-open"); }
+
+/* =============================================
+   UTILS
+============================================= */
+function showAlertEl(msg, type, id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg; el.className=`alert alert-${type}`; el.style.display="block";
+  setTimeout(()=>el.style.display="none", 5000);
+}
+function esc(v) {
+  const d=document.createElement("div"); d.textContent=String(v??""); return d.innerHTML;
+}
+</script>
+</body>
+</html>
