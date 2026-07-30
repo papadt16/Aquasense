@@ -859,9 +859,10 @@ const FIREBASE_CONFIG = {
 };
 
 const MQTT_CONFIG = {
-  brokerUrl: "wss://YOUR_HIVEMQ_HOST:8884/mqtt",
-  username:  "YOUR_MQTT_USERNAME",
-  password:  "YOUR_MQTT_PASSWORD",
+  // Notice the 'wss://' at the front and ':8884/mqtt' at the end!
+  brokerUrl: "wss://c682f185be364b02a4dff5877daccf8e.s1.eu.hivemq.cloud:8884/mqtt",
+  username:  "aquawatch_node",
+  password:  "Emmanuel1234$",
   rootTopic: "water_tank" // ESP32 publishes to water_tank/{id}/telemetry
 };
 
