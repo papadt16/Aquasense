@@ -702,13 +702,21 @@ body {
 
   <div id="analytics-alert" class="alert" style="display:none;"></div>
 
-  <!-- Filter bar -->
+<!-- Filter bar -->
   <div class="loc-bar" style="margin-bottom:20px;">
     <span class="loc-bar-label">📍 Location</span>
     <select id="anaLocSelect" class="form-input" style="width:min(190px,100%);" onchange="loadAnaDevices()"></select>
+    
     <span class="loc-bar-label">🪣 Tank</span>
     <select id="anaDevSelect" class="form-input" style="width:min(190px,100%);" onchange="renderAnalytics()"></select>
+    
     <button class="btn btn-primary" onclick="renderAnalytics()">↺ Refresh</button>
+
+    <!-- NEW: Export Buttons aligned to the right -->
+    <div style="margin-left:auto; display:flex; gap:8px;">
+      <button class="btn btn-soft" onclick="exportData('csv')">📄 Export CSV</button>
+      <button class="btn btn-soft" onclick="exportData('pdf')">📑 Export PDF</button>
+    </div>
   </div>
 
   <!-- Prediction cards -->
@@ -829,6 +837,8 @@ body {
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
@@ -1391,21 +1401,62 @@ function updateAccount() {
 /* =============================================
    ANALYTICS SECTION
 ============================================= */
+/* =============================================
+   ANALYTICS SECTION
+============================================= */
 let chartLevel=null, chartCons=null;
 
 function loadAnaDevices() {
   const loc     = document.getElementById("anaLocSelect").value;
   const devices = loadDevices().filter(d=>d.location===loc);
   const sel     = document.getElementById("anaDevSelect");
-  sel.innerHTML = devices.map(d=>`<option value="${esc(d.deviceId)}">${esc(d.displayName)}</option>`).join("")
-    || "<option value=''>No devices</option>";
-  if (devices.length) renderAnalytics();
+  
+  let options = devices.map(d=>`<option value="${esc(d.deviceId)}">${esc(d.displayName)}</option>`).join("");
+  
+  if (devices.length) {
+    // Insert Collective Option at the top of the list
+    sel.innerHTML = `<option value="ALL">🌟 All Tanks (${esc(loc)})</option>` + options;
+    renderAnalytics();
+  } else {
+    sel.innerHTML = "<option value=''>No devices</option>";
+  }
+}
+
+// NEW: Calculate combined data for a whole location
+function getCollectiveHistory(loc, days=7) {
+  const devices = loadDevices().filter(d=>d.location===loc);
+  const allRows = devices.map(d => getDeviceHistory(d.deviceId, days));
+  
+  if (!allRows.length) return [];
+  
+  const aggregatedRows = [];
+  for (let i = 0; i < days; i++) {
+    const dailyData = allRows.map(rows => rows[i]);
+    const validAvgs = dailyData.map(d => d.avg).filter(v => v !== null);
+    const validCons = dailyData.map(d => d.consumption).filter(v => v !== null);
+    
+    aggregatedRows.push({
+      date: dailyData[0].date,
+      label: dailyData[0].label,
+      // Average the levels across all tanks
+      avg: validAvgs.length ? Math.round(validAvgs.reduce((a,b)=>a+b,0)/validAvgs.length) : null,
+      min: null, // Min/Max are omitted in aggregate view
+      max: null,
+      // SUM the consumption across all tanks
+      consumption: validCons.length ? validCons.reduce((a,b)=>a+b,0) : null 
+    });
+  }
+  return aggregatedRows;
 }
 
 function renderAnalytics() {
   const deviceId = document.getElementById("anaDevSelect").value;
+  const loc = document.getElementById("anaLocSelect").value;
   if (!deviceId) return;
-  const rows = getDeviceHistory(deviceId, 7);
+  
+  // Choose between Collective or Individual tank data
+  let rows = (deviceId === "ALL") ? getCollectiveHistory(loc, 7) : getDeviceHistory(deviceId, 7);
+  
   const pred = predict(deviceId, rows);
   renderPredCards(pred);
   renderLevelChart(rows, pred, deviceId);
@@ -1529,6 +1580,89 @@ function renderHistTable(rows) {
   `).join("");
 }
 
+  /* =============================================
+   DATA EXPORT (CSV & PDF)
+============================================= */
+function exportData(format) {
+  const deviceId = document.getElementById("anaDevSelect").value;
+  const loc = document.getElementById("anaLocSelect").value;
+  if (!deviceId) return showAlertEl("No data to export.", "warning", "analytics-alert");
+
+  const isCollective = (deviceId === "ALL");
+  const reportName = isCollective ? `AquaWatch_Location_${loc}` : `AquaWatch_Tank_${deviceId}`;
+  
+  // Fetch the data based on current view
+  let rows = isCollective ? getCollectiveHistory(loc, 7) : getDeviceHistory(deviceId, 7);
+  
+  if (format === 'csv') {
+    // Prefix with UTF-8 BOM for perfect Excel compatibility
+    let csvContent = "\uFEFFDate,Avg Level (%),Consumption (%),Estimated Pump Actions\n";
+    
+    rows.forEach(r => {
+      let pumpEst = "—";
+      if (r.consumption !== null) {
+        if (r.consumption < 5) pumpEst = "Likely none";
+        else if (r.consumption < 15) pumpEst = "~1 hr";
+        else if (r.consumption < 25) pumpEst = "~2-3 hr";
+        else pumpEst = "3+ hr (high use)";
+      }
+      let avg = r.avg !== null ? r.avg : "";
+      let cons = r.consumption !== null ? r.consumption.toFixed(1) : "";
+      
+      csvContent += `${r.date},${avg},${cons},${pumpEst}\n`;
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${reportName}.csv`;
+    link.click();
+    
+  } else if (format === 'pdf') {
+    // Generate Landscape PDF Report
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('landscape');
+    
+    // Header Configuration
+    doc.setFontSize(18);
+    doc.text("AquaWatch Water Analytics Report", 14, 20);
+    
+    doc.setFontSize(11);
+    doc.setTextColor(100);
+    doc.text(`Location: ${loc} | Scope: ${isCollective ? 'All Tanks (Collective)' : deviceId}`, 14, 28);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 34);
+
+    const tableCols = ["Date", "Avg Level (%)", "Consumption (%)", "Pump Estimates"];
+    const tableRows = rows.map(r => {
+      let pumpEst = "—";
+      if (r.consumption !== null) {
+        if (r.consumption < 5) pumpEst = "Likely none";
+        else if (r.consumption < 15) pumpEst = "~1 hr";
+        else if (r.consumption < 25) pumpEst = "~2-3 hr";
+        else pumpEst = "3+ hr (high use)";
+      }
+      return [
+        r.date, 
+        r.avg !== null ? r.avg + "%" : "—", 
+        r.consumption !== null ? r.consumption.toFixed(1) + "%" : "—", 
+        pumpEst
+      ];
+    });
+
+    // Render Data Table
+    doc.autoTable({
+      head: [tableCols],
+      body: tableRows,
+      startY: 40,
+      theme: 'grid',
+      headStyles: { fillColor: [2, 27, 46] }, // Matches var(--navy)
+    });
+    
+    doc.save(`${reportName}.pdf`);
+  }
+}
+  
 /* =============================================
    PAGE NAVIGATION
 ============================================= */
