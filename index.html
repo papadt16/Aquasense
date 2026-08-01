@@ -804,6 +804,7 @@ body {
 </section>
 
 <!-- ── ACCOUNT ── -->
+<!-- ── ACCOUNT ── -->
 <section id="account-section" class="page-section">
   <div class="page-header">
     <div>
@@ -824,7 +825,9 @@ body {
 
   <div class="card">
     <div class="card-header"><span class="card-title">System Status</span></div>
-    <div id="acc-overview">—</div>
+    <div id="acc-overview" style="margin-bottom: 16px;">—</div>
+    <!-- NEW: Manual Sync Button -->
+    <button id="sync-btn" class="btn btn-primary btn-block" onclick="forceCloudSync()">☁️ Force Cloud Sync</button>
   </div>
 </section>
 
@@ -957,7 +960,10 @@ async function pullCloud() {
       if (d.devices) localStorage.setItem(DEVICES_KEY, JSON.stringify(d.devices));
       if (d.history) localStorage.setItem(HISTORY_KEY, JSON.stringify(d.history));
     }
-  } catch(e) { console.warn("Cloud pull:", e); }
+  } catch(e) { 
+    console.warn("Cloud pull error:", e); 
+    showAlertEl("Cloud sync failed. Check Firebase Firestore rules.", "danger", "dev-alert");
+  }
   cloudReady = true;
 }
 
@@ -969,9 +975,22 @@ async function pushCloud() {
       history: loadHistory(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
-  } catch(e) { console.warn("Cloud push:", e); }
+  } catch(e) { 
+    console.warn("Cloud push error:", e); 
+    showAlertEl("Failed to save to cloud. Check Firebase Firestore rules.", "danger", "dev-alert");
+  }
 }
 
+// NEW: Manual Sync Function
+async function forceCloudSync() {
+  const btn = document.getElementById("sync-btn");
+  if(btn) { btn.disabled = true; btn.textContent = "Syncing..."; }
+  await pushCloud();
+  await pullCloud();
+  renderAll();
+  if(btn) { btn.disabled = false; btn.textContent = "☁️ Force Cloud Sync"; }
+  alert("Data successfully synced with the cloud!");
+}
 /* =============================================
    DEVICE STORAGE
 ============================================= */
