@@ -724,13 +724,13 @@ body {
 
   <!-- Level history chart -->
   <div class="card" style="margin-bottom:18px;">
-    <div class="card-header"><span class="card-title">7-Day Water Level History</span></div>
+    <div class="card-header"><span class="card-title">24-Hour Water Level History</span></div>
     <div class="chart-wrap"><canvas id="chartLevel"></canvas></div>
   </div>
 
   <!-- Consumption chart -->
   <div class="card" style="margin-bottom:18px;">
-    <div class="card-header"><span class="card-title">Daily Water Consumption (%/day)</span></div>
+    <div class="card-header"><span class="card-title">Hourly Water Consumption (%/hour)</span></div>
     <div class="chart-wrap"><canvas id="chartConsumption"></canvas></div>
   </div>
 
@@ -1036,41 +1036,60 @@ function badgeText(level, offline) {
 }
 
 /* =============================================
-   HISTORY TRACKING
+   HISTORY TRACKING (HOURLY HIGH-RESOLUTION)
 ============================================= */
 function storeLevelReading(deviceId, level) {
-  const today = new Date().toISOString().slice(0,10);
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const hourPart = String(now.getHours()).padStart(2, '0') + ":00"; // HH:00
+  const timeKey = `${datePart} ${hourPart}`;
+
   const h = loadHistory();
-  if (!h[deviceId])        h[deviceId] = {};
-  if (!h[deviceId][today]) h[deviceId][today] = { readings:[], min:100, max:0 };
-  const day = h[deviceId][today];
-  day.readings.push(level);
-  if (day.readings.length > 300) day.readings.shift();
-  day.min = Math.min(day.min, level);
-  day.max = Math.max(day.max, level);
-  day.avg = Math.round(day.readings.reduce((a,b)=>a+b,0)/day.readings.length);
+  if (!h[deviceId]) h[deviceId] = {};
+  if (!h[deviceId][timeKey]) h[deviceId][timeKey] = { readings: [], min: 100, max: 0 };
+  
+  const slot = h[deviceId][timeKey];
+  slot.readings.push(level);
+  if (slot.readings.length > 300) slot.readings.shift(); // Keep memory lean
+  
+  slot.min = Math.min(slot.min, level);
+  slot.max = Math.max(slot.max, level);
+  slot.avg = Math.round(slot.readings.reduce((a, b) => a + b, 0) / slot.readings.length);
+  
   saveHistory(h);
   if (Math.random() < 0.04) pushCloud();
 }
 
-function getDeviceHistory(deviceId, days=7) {
+function getDeviceHistory(deviceId, hoursBack = 24) {
   const h = loadHistory()[deviceId] || {};
   const rows = [];
-  for (let i=days-1; i>=0; i--) {
-    const d = new Date(); d.setDate(d.getDate()-i);
-    const key = d.toISOString().slice(0,10);
-    const day = h[key];
+  const now = new Date();
+
+  // Step backwards hour by hour
+  for (let i = hoursBack - 1; i >= 0; i--) {
+    const d = new Date(now.getTime() - (i * 60 * 60 * 1000));
+    const datePart = d.toISOString().slice(0, 10);
+    const hourPart = String(d.getHours()).padStart(2, '0') + ":00";
+    const timeKey = `${datePart} ${hourPart}`;
+    const slot = h[timeKey];
+
+    // Label for charts (e.g., "14:00")
+    const label = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+
     rows.push({
-      date: key,
-      label: d.toLocaleDateString('en-GB', {day:'2-digit', month:'short'}),
-      avg: day?.avg ?? null, min: day?.min ?? null, max: day?.max ?? null,
+      date: timeKey,
+      label: label,
+      avg: slot?.avg ?? null,
+      min: slot?.min ?? null,
+      max: slot?.max ?? null,
       consumption: null
     });
   }
-  // Consumption = drop from previous day's max to current day's min
-  for (let i=1; i<rows.length; i++) {
-    if (rows[i-1].max !== null && rows[i].min !== null) {
-      rows[i].consumption = Math.max(0, rows[i-1].max - rows[i].min);
+
+  // Calculate consumption (drop from previous hour's max to current hour's min)
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i - 1].max !== null && rows[i].min !== null) {
+      rows[i].consumption = Math.max(0, rows[i - 1].max - rows[i].min);
     }
   }
   return rows;
@@ -1441,28 +1460,26 @@ function loadAnaDevices() {
   }
 }
 
-// NEW: Calculate combined data for a whole location
-function getCollectiveHistory(loc, days=7) {
-  const devices = loadDevices().filter(d=>d.location===loc);
-  const allRows = devices.map(d => getDeviceHistory(d.deviceId, days));
+// NEW: Calculate combined data for a whole location (HOURLY)
+function getCollectiveHistory(loc, hoursBack = 24) {
+  const devices = loadDevices().filter(d => d.location === loc);
+  const allRows = devices.map(d => getDeviceHistory(d.deviceId, hoursBack));
   
   if (!allRows.length) return [];
   
   const aggregatedRows = [];
-  for (let i = 0; i < days; i++) {
-    const dailyData = allRows.map(rows => rows[i]);
-    const validAvgs = dailyData.map(d => d.avg).filter(v => v !== null);
-    const validCons = dailyData.map(d => d.consumption).filter(v => v !== null);
+  for (let i = 0; i < hoursBack; i++) {
+    const hourlyData = allRows.map(rows => rows[i]);
+    const validAvgs = hourlyData.map(d => d.avg).filter(v => v !== null);
+    const validCons = hourlyData.map(d => d.consumption).filter(v => v !== null);
     
     aggregatedRows.push({
-      date: dailyData[0].date,
-      label: dailyData[0].label,
-      // Average the levels across all tanks
-      avg: validAvgs.length ? Math.round(validAvgs.reduce((a,b)=>a+b,0)/validAvgs.length) : null,
-      min: null, // Min/Max are omitted in aggregate view
+      date: hourlyData[0].date,
+      label: hourlyData[0].label,
+      avg: validAvgs.length ? Math.round(validAvgs.reduce((a, b) => a + b, 0) / validAvgs.length) : null,
+      min: null,
       max: null,
-      // SUM the consumption across all tanks
-      consumption: validCons.length ? validCons.reduce((a,b)=>a+b,0) : null 
+      consumption: validCons.length ? validCons.reduce((a, b) => a + b, 0) : null 
     });
   }
   return aggregatedRows;
@@ -1474,7 +1491,7 @@ function renderAnalytics() {
   if (!deviceId) return;
   
   // Choose between Collective or Individual tank data
-  let rows = (deviceId === "ALL") ? getCollectiveHistory(loc, 7) : getDeviceHistory(deviceId, 7);
+  let rows = (deviceId === "ALL") ? getCollectiveHistory(loc, 24) : getDeviceHistory(deviceId, 24);
   
   const pred = predict(deviceId, rows);
   renderPredCards(pred);
@@ -1520,7 +1537,7 @@ function renderLevelChart(rows, pred, deviceId) {
   chartLevel = new Chart(ctx, {
     type:"line",
     data:{
-      labels:[...rows.map(r=>r.label),"+1d","+2d","+3d"],
+      labels: [...rows.map(r => r.label), "+1h", "+2h", "+3h"],
       datasets:[
         { label:"Avg Level (%)", data:rows.map(r=>r.avg), fill:true,
           borderColor:"#0f5f99", backgroundColor:"rgba(15,95,153,0.12)",
@@ -1552,11 +1569,11 @@ function renderConsChart(rows) {
   const ctx = document.getElementById("chartConsumption").getContext("2d");
   if (chartCons) chartCons.destroy();
   chartCons = new Chart(ctx, {
-    type:"bar",
-    data:{
-      labels:rows.map(r=>r.label),
-      datasets:[{
-        label:"Consumption (%/day)",
+    type: "bar",
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [{
+        label: "Consumption (%/hour)",
         data:rows.map(r=>r.consumption),
         backgroundColor:rows.map(r=>{
           if (r.consumption===null) return "#e0e0e0";
@@ -1611,7 +1628,7 @@ function exportData(format) {
   const reportName = isCollective ? `AquaWatch_Location_${loc}` : `AquaWatch_Tank_${deviceId}`;
   
   // Fetch the data based on current view
-  let rows = isCollective ? getCollectiveHistory(loc, 7) : getDeviceHistory(deviceId, 7);
+  let rows = isCollective ? getCollectiveHistory(loc, 24) : getDeviceHistory(deviceId, 24);
   
   if (format === 'csv') {
     // Prefix with UTF-8 BOM for perfect Excel compatibility
